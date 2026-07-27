@@ -1,0 +1,19 @@
+# Local Postgres for development. In production the same schema runs on Supabase —
+# only DATABASE_URL changes. `docker compose up -d` then `npm run db:push && npm run db:seed`.
+services:
+  db:
+    image: postgres:16
+    container_name: nfda-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nfda
+      POSTGRES_PASSWORD: nfda
+      POSTGRES_DB: nfda
+    # Host 5434 avoids clashing with a native Postgres already on 5432.
+    ports:
+      - "5434:5432"
+    volumes:
+      - nfda_pgdata:/var/lib/postgresql/data
+
+volumes:
+  nfda_pgdata:
