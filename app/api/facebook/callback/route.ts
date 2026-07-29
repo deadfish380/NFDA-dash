@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const userToken = await exchangeCodeForUserToken(code);
+    const userToken = await exchangeCodeForUserToken(code, req.nextUrl.origin);
     const res = NextResponse.redirect(new URL(`/connect?orgId=${encodeURIComponent(orgId)}`, req.url));
     res.cookies.set("fb_user_token", userToken, {
       httpOnly: true,

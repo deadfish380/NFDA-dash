@@ -3,7 +3,11 @@ import "server-only";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const APP_ID = process.env.META_APP_ID ?? "";
 const APP_SECRET = process.env.META_APP_SECRET ?? "";
-const REDIRECT_URI = process.env.META_REDIRECT_URI ?? "http://localhost:3000/api/facebook/callback";
+
+/** Callback URL derived from the current request origin — works on localhost and the deployed domain alike. */
+function redirectUri(origin: string): string {
+  return `${origin}/api/facebook/callback`;
+}
 
 /** Dry-run is ON unless explicitly disabled — posting is simulated by default. */
 export const DRY_RUN = process.env.FACEBOOK_DRY_RUN !== "false";
@@ -15,10 +19,10 @@ const CONFIG_ID = process.env.META_CONFIG_ID;
 export type FacebookPage = { id: string; name: string; access_token: string };
 
 /** The Facebook login dialog URL. `state` carries the org id back to the callback. */
-export function getAuthUrl(state: string): string {
+export function getAuthUrl(state: string, origin: string): string {
   const params = new URLSearchParams({
     client_id: APP_ID,
-    redirect_uri: REDIRECT_URI,
+    redirect_uri: redirectUri(origin),
     state,
     response_type: "code",
   });
@@ -32,11 +36,11 @@ export function getAuthUrl(state: string): string {
 }
 
 /** Exchange the OAuth code for a short-lived user token, then a long-lived one. */
-export async function exchangeCodeForUserToken(code: string): Promise<string> {
+export async function exchangeCodeForUserToken(code: string, origin: string): Promise<string> {
   const short = await graphGet("/oauth/access_token", {
     client_id: APP_ID,
     client_secret: APP_SECRET,
-    redirect_uri: REDIRECT_URI,
+    redirect_uri: redirectUri(origin),
     code,
   });
   const long = await graphGet("/oauth/access_token", {
