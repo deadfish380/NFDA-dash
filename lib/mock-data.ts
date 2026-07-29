@@ -20,9 +20,13 @@ export type Organization = {
   name: string;
   shortName: string;
   facebookPage: string | null;
+  facebookPageId: string | null;
   facebookConnected: boolean;
   storeUrl: string | null;
   postsPerDay: number;
+  postingTimes: string[];
+  autoApprove: boolean;
+  brandVoice: string | null;
   websites: Website[];
 };
 
@@ -46,9 +50,14 @@ export const ORGANIZATIONS: Organization[] = [
     name: "National Fish Decoy Association",
     shortName: "NFDA",
     facebookPage: "National Fish Decoy Association",
-    facebookConnected: true,
+    facebookPageId: null,
+    facebookConnected: false,
     storeUrl: "https://www.nfdadecoys.org/store",
     postsPerDay: 2,
+    postingTimes: ["09:00", "15:00"],
+    autoApprove: false,
+    brandVoice:
+      "Warm and proud of the craft. Short paragraphs, one relevant emoji, always end with a clear call to action and a link.",
     websites: [
       {
         id: "nfda-main",
@@ -71,9 +80,13 @@ export const ORGANIZATIONS: Organization[] = [
     name: "Longview Conservation",
     shortName: "Longview",
     facebookPage: null,
+    facebookPageId: null,
     facebookConnected: false,
     storeUrl: null,
     postsPerDay: 2,
+    postingTimes: ["09:00", "15:00"],
+    autoApprove: false,
+    brandVoice: "Mission-driven and hopeful. Clear, plain language with a strong call to action.",
     websites: [
       {
         id: "longview-main",

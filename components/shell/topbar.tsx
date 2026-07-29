@@ -1,12 +1,12 @@
 "use client";
 
-import { Facebook, Menu } from "lucide-react";
+import { Facebook, FlaskConical, Menu } from "lucide-react";
 import { useOrg } from "@/components/shell/org-context";
 import { useShell } from "@/components/shell/shell-context";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "./theme-toggle";
 
-export function Topbar({ title }: { title: string }) {
+export function Topbar({ title, dryRun }: { title: string; dryRun: boolean }) {
   const { openMobileNav } = useShell();
   const { activeOrg } = useOrg();
 
@@ -24,15 +24,20 @@ export function Topbar({ title }: { title: string }) {
       <h1 className="min-w-0 truncate text-base font-semibold tracking-tight sm:text-lg">{title}</h1>
 
       <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+        {dryRun ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-warning/40 bg-warning/10 px-2.5 py-1 text-xs font-medium text-foreground/80">
+            <FlaskConical className="size-3.5 text-warning" />
+            <span className="hidden sm:inline">Test mode — posts simulated</span>
+            <span className="sm:hidden">Test mode</span>
+          </span>
+        ) : null}
         <span
           className={cn(
             "hidden items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs font-medium sm:inline-flex",
             activeOrg.facebookConnected ? "text-foreground/80" : "text-muted-foreground",
           )}
         >
-          <Facebook
-            className={cn("size-3.5", activeOrg.facebookConnected ? "text-primary" : "text-muted-foreground")}
-          />
+          <Facebook className={cn("size-3.5", activeOrg.facebookConnected ? "text-primary" : "text-muted-foreground")} />
           {activeOrg.facebookConnected ? "Facebook connected" : "Not connected"}
         </span>
         <ThemeToggle />

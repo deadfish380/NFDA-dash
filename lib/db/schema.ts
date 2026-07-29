@@ -26,6 +26,8 @@ export const organizations = pgTable("organizations", {
   storeUrl: text("store_url"),
   postsPerDay: integer("posts_per_day").notNull().default(2),
   postingTimes: text("posting_times").array().notNull().default(["09:00", "15:00"]),
+  // Daily automatic scrape time (HH:MM) — the "6am job" in production.
+  scrapeTime: text("scrape_time").notNull().default("06:00"),
   autoApprove: boolean("auto_approve").notNull().default(false),
   brandVoice: text("brand_voice"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -57,6 +59,8 @@ export const contentItems = pgTable("content_items", {
   title: text("title"),
   body: text("body").notNull(),
   imageUrl: text("image_url"),
+  // Hash of the body — lets a re-scrape skip a page whose content hasn't changed.
+  contentHash: text("content_hash"),
   scrapedAt: timestamp("scraped_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -1,6 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 
-const MODEL = "claude-sonnet-5";
+const ANTHROPIC_MODEL = "claude-sonnet-5";
+const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o";
 
 export type GenerateInput = {
   orgName: string;
@@ -29,31 +31,13 @@ Rules:
 - Match the given brand voice.
 - Keep it 2-4 short paragraphs, warm and specific, at most one relevant emoji.
 - Always end with a clear call to action that drives traffic to the org's link.
-- Return ONLY a JSON object, no prose, with keys:
+- Return ONLY a JSON object with keys:
   headline (short internal label), body (the post text), cta (button-style call to action, <8 words),
   imageHint (one line describing the ideal photo to attach).`;
 
-/**
- * Generates a post from scraped content + an optional idea. Returns a safe,
- * on-brand stub when ANTHROPIC_API_KEY isn't set, so the dashboard works without
- * a key during early development.
- */
-export async function generatePost(input: GenerateInput): Promise<GeneratedDraft> {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return stub(input);
-  }
-
-  const client = new Anthropic();
+function userPrompt(input: GenerateInput): string {
   const idea = input.idea?.trim();
-
-  const msg = await client.messages.create({
-    model: MODEL,
-    max_tokens: 700,
-    system: SYSTEM,
-    messages: [
-      {
-        role: "user",
-        content: `Organization: ${input.orgName}
+  return `Organization: ${input.orgName}
 Brand voice: ${input.brandVoice}
 CTA should link to: ${input.ctaUrl}
 ${idea ? `Post idea from the client: ${idea}` : "No specific idea — choose a strong angle from the content."}
@@ -61,14 +45,26 @@ ${idea ? `Post idea from the client: ${idea}` : "No specific idea — choose a s
 Website content to ground the post in:
 """
 ${input.content.slice(0, 4000)}
-"""`,
-      },
-    ],
-  });
+"""`;
+}
 
-  const text = msg.content.find((b) => b.type === "text")?.text ?? "";
-  const parsed = extractJson(text);
+/**
+ * Generates a post from scraped content + an optional idea. Picks whichever AI
+ * provider has a key configured (OpenAI preferred, then Anthropic), and falls
+ * back to a safe on-brand stub when neither is set — so the dashboard always runs.
+ */
+export async function generatePost(input: GenerateInput): Promise<GeneratedDraft> {
+  let parsed: Partial<GeneratedDraft> = {};
 
+  if (process.env.OPENAI_API_KEY) {
+    parsed = await generateOpenAI(input);
+  } else if (process.env.ANTHROPIC_API_KEY) {
+    parsed = await generateAnthropic(input);
+  } else {
+    return stub(input);
+  }
+
+  const idea = input.idea?.trim();
   return {
     headline: parsed.headline ?? (idea ?? "New post"),
     body: parsed.body ?? "",
@@ -79,7 +75,33 @@ ${input.content.slice(0, 4000)}
   };
 }
 
-function extractJson(text: string): Partial<GeneratedDraft> {
+async function generateOpenAI(input: GenerateInput): Promise<Partial<GeneratedDraft>> {
+  const client = new OpenAI();
+  const res = await client.chat.completions.create({
+    model: OPENAI_MODEL,
+    max_tokens: 700,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: SYSTEM },
+      { role: "user", content: userPrompt(input) },
+    ],
+  });
+  return safeJson(res.choices[0]?.message?.content ?? "");
+}
+
+async function generateAnthropic(input: GenerateInput): Promise<Partial<GeneratedDraft>> {
+  const client = new Anthropic();
+  const msg = await client.messages.create({
+    model: ANTHROPIC_MODEL,
+    max_tokens: 700,
+    system: SYSTEM,
+    messages: [{ role: "user", content: userPrompt(input) }],
+  });
+  const text = msg.content.find((b) => b.type === "text")?.text ?? "";
+  return safeJson(text);
+}
+
+function safeJson(text: string): Partial<GeneratedDraft> {
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) return {};
   try {

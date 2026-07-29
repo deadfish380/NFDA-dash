@@ -11,7 +11,12 @@ import * as schema from "./schema";
 const LOCAL_DEFAULT = "postgres://nfda:nfda@localhost:5434/nfda";
 const connectionString = process.env.DATABASE_URL ?? LOCAL_DEFAULT;
 
-const client = postgres(connectionString, { prepare: false });
+// Supabase (and any non-local host) requires SSL; local Docker does not.
+const isLocal = /localhost|127\.0\.0\.1/.test(connectionString);
+const client = postgres(connectionString, {
+  prepare: false,
+  ssl: isLocal ? false : "require",
+});
 
 export const db = drizzle(client, { schema });
 export { schema };

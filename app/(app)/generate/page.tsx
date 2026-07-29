@@ -1,15 +1,24 @@
 "use client";
 
 import { Globe, Loader2, Sparkles } from "lucide-react";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
 import { PostPreview } from "@/components/posts/post-preview";
 import { Reveal } from "@/components/motion/reveal";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/input";
 import { useOrg } from "@/components/shell/org-context";
+import { generateDraft, saveDraft } from "@/app/actions";
 
-type Draft = { body: string; cta: string; link: string; imageHint: string };
+type Draft = {
+  headline: string;
+  body: string;
+  cta: string;
+  link: string;
+  imageHint: string;
+  sourceWebsite: string;
+};
 
 const IDEAS = [
   "New logo t-shirt just dropped in the store",
@@ -18,40 +27,31 @@ const IDEAS = [
   "Remind people about the Perham Show",
 ];
 
-/**
- * Week-1 mock generator: composes a believable draft from the idea + the active
- * org's store/site. Week 2 replaces this with a real Claude call over the
- * scraped content. The UI contract (idea in → draft out → preview) stays identical.
- */
-function fakeGenerate(idea: string, storeUrl: string | null, siteUrl: string): Draft {
-  const link = storeUrl ?? siteUrl;
-  const clean = idea.trim().replace(/\s+/g, " ");
-  return {
-    body: `${clean.charAt(0).toUpperCase()}${clean.slice(1)}. \n\nWe're rebuilding our page and posting the best of what we do — the craft, the community, and the shows that bring us together. Follow along and be part of it. 🎣`,
-    cta: storeUrl ? "Shop the store" : "Visit our website",
-    link,
-    imageHint: `Photo suggestion for: ${clean}`,
-  };
-}
-
 export default function GeneratePage() {
   const { activeOrg } = useOrg();
+  const router = useRouter();
   const [idea, setIdea] = useState("");
-  const [loading, setLoading] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [added, setAdded] = useState(false);
-
-  const siteUrl = activeOrg.websites[0]?.url ?? "";
+  const [generating, startGenerate] = useTransition();
+  const [saving, startSave] = useTransition();
 
   function generate() {
     if (!idea.trim()) return;
-    setLoading(true);
     setAdded(false);
-    // Simulated latency so the interaction reads like real generation.
-    setTimeout(() => {
-      setDraft(fakeGenerate(idea, activeOrg.storeUrl, siteUrl));
-      setLoading(false);
-    }, 700);
+    startGenerate(async () => {
+      const d = await generateDraft(activeOrg.id, idea);
+      setDraft(d);
+    });
+  }
+
+  function add() {
+    if (!draft) return;
+    startSave(async () => {
+      await saveDraft(activeOrg.id, draft);
+      router.refresh();
+      setAdded(true);
+    });
   }
 
   return (
@@ -100,9 +100,9 @@ export default function GeneratePage() {
                 Pulls from {activeOrg.websites.map((w) => w.label).join(", ")}
               </div>
 
-              <Button onClick={generate} disabled={loading || !idea.trim()} className="w-full">
-                {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-                {loading ? "Generating…" : "Generate post"}
+              <Button onClick={generate} disabled={generating || !idea.trim()} className="w-full">
+                {generating ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+                {generating ? "Generating…" : "Generate post"}
               </Button>
             </CardContent>
           </Card>
@@ -119,10 +119,11 @@ export default function GeneratePage() {
                 imageHint={draft.imageHint}
               />
               <div className="flex gap-2">
-                <Button onClick={() => setAdded(true)} disabled={added} className="flex-1">
+                <Button onClick={add} disabled={added || saving} className="flex-1">
+                  {saving ? <Loader2 className="size-4 animate-spin" /> : null}
                   {added ? "Added to queue ✓" : "Add to review queue"}
                 </Button>
-                <Button variant="outline" onClick={generate}>
+                <Button variant="outline" onClick={generate} disabled={generating}>
                   Regenerate
                 </Button>
               </div>

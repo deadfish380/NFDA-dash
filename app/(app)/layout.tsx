@@ -1,25 +1,15 @@
-"use client";
+import { AppShell } from "@/components/shell/app-shell";
+import { getAllPosts, getOrganizations } from "@/lib/data";
 
-import { usePathname } from "next/navigation";
-import { APP_NAV, MobileNav, Sidebar } from "@/components/shell/sidebar";
-import { Topbar } from "@/components/shell/topbar";
+// Always render per-request with fresh DB data; mutations revalidate this layout.
+export const dynamic = "force-dynamic";
 
-function titleFor(pathname: string): string {
-  const item = APP_NAV.find((i) => (i.href === "/" ? pathname === "/" : pathname.startsWith(i.href)));
-  return item?.label ?? "Dashboard";
-}
-
-export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const [orgs, posts] = await Promise.all([getOrganizations(), getAllPosts()]);
+  const dryRun = process.env.FACEBOOK_DRY_RUN !== "false";
   return (
-    <div className="flex min-h-screen">
-      <Sidebar />
-      <MobileNav />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar title={titleFor(pathname)} />
-        {children}
-      </div>
-    </div>
+    <AppShell orgs={orgs} posts={posts} dryRun={dryRun}>
+      {children}
+    </AppShell>
   );
 }

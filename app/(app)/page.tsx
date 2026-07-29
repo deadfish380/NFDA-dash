@@ -9,7 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useOrg } from "@/components/shell/org-context";
-import { postsForOrg } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 
 const dateFmt = new Intl.DateTimeFormat("en-US", {
@@ -21,8 +20,7 @@ const dateFmt = new Intl.DateTimeFormat("en-US", {
 });
 
 export default function DashboardPage() {
-  const { activeOrg } = useOrg();
-  const posts = postsForOrg(activeOrg.id);
+  const { activeOrg, activePosts: posts } = useOrg();
 
   const needsReview = posts.filter((p) => p.status === "needs_review");
   const scheduled = posts

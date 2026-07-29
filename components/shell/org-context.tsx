@@ -1,25 +1,37 @@
 "use client";
 
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import { ORGANIZATIONS, type Organization } from "@/lib/mock-data";
+import type { Organization, Post } from "@/lib/mock-data";
 
 type OrgContextValue = {
   orgs: Organization[];
+  posts: Post[];
   activeOrg: Organization;
+  activePosts: Post[];
   setActiveOrgId: (id: string) => void;
 };
 
 const OrgContext = createContext<OrgContextValue | null>(null);
 
-export function OrgProvider({ children }: { children: ReactNode }) {
-  const [activeOrgId, setActiveOrgId] = useState(ORGANIZATIONS[0].id);
-  const activeOrg = useMemo(
-    () => ORGANIZATIONS.find((o) => o.id === activeOrgId) ?? ORGANIZATIONS[0],
-    [activeOrgId],
+/** Holds server-fetched orgs/posts; only the active-org selection is client state. */
+export function OrgProvider({
+  orgs,
+  posts,
+  children,
+}: {
+  orgs: Organization[];
+  posts: Post[];
+  children: ReactNode;
+}) {
+  const [activeOrgId, setActiveOrgId] = useState(orgs[0]?.id ?? "");
+  const activeOrg = orgs.find((o) => o.id === activeOrgId) ?? orgs[0];
+  const activePosts = useMemo(
+    () => posts.filter((p) => p.orgId === activeOrg?.id),
+    [posts, activeOrg],
   );
 
   return (
-    <OrgContext.Provider value={{ orgs: ORGANIZATIONS, activeOrg, setActiveOrgId }}>
+    <OrgContext.Provider value={{ orgs, posts, activeOrg, activePosts, setActiveOrgId }}>
       {children}
     </OrgContext.Provider>
   );

@@ -24,8 +24,9 @@ async function seed() {
       facebookConnected: org.facebookConnected,
       storeUrl: org.storeUrl,
       postsPerDay: org.postsPerDay,
-      brandVoice:
-        "Warm and proud of the craft. Short paragraphs, one relevant emoji, always end with a clear call to action and a link.",
+      postingTimes: org.postingTimes,
+      autoApprove: org.autoApprove,
+      brandVoice: org.brandVoice,
     });
 
     for (const site of org.websites) {
