@@ -10,13 +10,20 @@ import type { ScrapedItem } from "@/lib/scrape/types";
  * from a client component — it pulls in the postgres driver.
  */
 
+// A flaky connection can hand back a garbled timestamp that parses into an
+// invalid Date; fail soft (null) instead of crashing the whole page render.
+function toISOStringOrNull(d: Date | null): string | null {
+  if (!d || Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
 function toWebsite(w: typeof schema.websites.$inferSelect): Website {
   return {
     id: w.id,
     url: w.url,
     label: w.label,
     status: w.status === "connected" ? "connected" : "pending",
-    lastScrapedAt: w.lastScrapedAt ? w.lastScrapedAt.toISOString() : null,
+    lastScrapedAt: toISOStringOrNull(w.lastScrapedAt),
   };
 }
 
@@ -48,8 +55,8 @@ function toPost(p: typeof schema.posts.$inferSelect): Post {
     link: p.link,
     sourceWebsite: p.sourceWebsite,
     imageHint: p.imageHint,
-    scheduledFor: p.scheduledFor ? p.scheduledFor.toISOString() : null,
-    createdAt: p.createdAt.toISOString(),
+    scheduledFor: toISOStringOrNull(p.scheduledFor),
+    createdAt: toISOStringOrNull(p.createdAt) ?? new Date(0).toISOString(),
   };
 }
 
@@ -91,7 +98,7 @@ export async function getScrapedItems(): Promise<ScrapedItem[]> {
     title: r.title,
     chars: r.body.length,
     hasImage: Boolean(r.imageUrl),
-    scrapedAt: r.scrapedAt.toISOString(),
+    scrapedAt: toISOStringOrNull(r.scrapedAt) ?? new Date(0).toISOString(),
   }));
 }
 
