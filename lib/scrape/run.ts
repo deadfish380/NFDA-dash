@@ -1,81 +1,28 @@
-import { createHash } from "node:crypto";
-import { desc, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { scrapePage } from "./scrape";
+import { crawlSite } from "./crawl";
+import { mapWithConcurrency } from "./pool";
 import type { ScrapeReport, ScrapeSiteResult } from "./types";
 
 /**
- * The scrape cycle: read every website row, fetch it, and store the content —
- * but only if it has actually changed. Dedup is by a hash of the page body:
- *   • no prior copy      → "new"       (insert)
- *   • body changed       → "updated"   (insert a new version)
- *   • body identical     → "unchanged" (skip — no duplicate row)
- * Returns a per-site report so the UI can show exactly what happened.
+ * The scrape cycle: for every website, run a sitemap-first shallow crawl. Each
+ * page is fetched conditionally, so an unchanged page returns 304 and is skipped
+ * without downloading; changed pages are stored as new content versions. The
+ * per-site rollup lets the UI show exactly what happened. This is the 6am job.
  *
  * @param orgId optional — limit to one organization.
  */
+
+// Websites are crawled in parallel (each crawl is itself bounded internally), but
+// with a small cap so we never open dozens of concurrent crawls at once.
+const SITE_CONCURRENCY = 3;
+
 export async function runScrape(orgId?: string): Promise<ScrapeReport> {
   const sites = orgId
     ? await db.select().from(schema.websites).where(eq(schema.websites.orgId, orgId))
     : await db.select().from(schema.websites);
 
-  const results: ScrapeSiteResult[] = [];
-
-  for (const site of sites) {
-    try {
-      const page = await scrapePage(site.url);
-      const hash = createHash("sha256").update(page.body).digest("hex");
-
-      // Most recent stored copy of this exact page.
-      const [latest] = await db
-        .select({ hash: schema.contentItems.contentHash })
-        .from(schema.contentItems)
-        .where(eq(schema.contentItems.sourceUrl, page.sourceUrl))
-        .orderBy(desc(schema.contentItems.scrapedAt))
-        .limit(1);
-
-      let status: ScrapeSiteResult["status"];
-      if (!latest) status = "new";
-      else if (latest.hash === hash) status = "unchanged";
-      else status = "updated";
-
-      if (status !== "unchanged") {
-        await db.insert(schema.contentItems).values({
-          orgId: site.orgId,
-          websiteId: site.id,
-          sourceUrl: page.sourceUrl,
-          title: page.title,
-          body: page.body,
-          imageUrl: page.imageUrl,
-          contentHash: hash,
-        });
-      }
-
-      await db
-        .update(schema.websites)
-        .set({ status: "connected", lastScrapedAt: new Date() })
-        .where(eq(schema.websites.id, site.id));
-
-      results.push({
-        label: site.label,
-        url: site.url,
-        status,
-        chars: page.body.length,
-        title: page.title,
-        hasImage: Boolean(page.imageUrl),
-      });
-    } catch (err) {
-      results.push({
-        label: site.label,
-        url: site.url,
-        status: "failed",
-        chars: 0,
-        title: null,
-        hasImage: false,
-        message: (err as Error).message,
-      });
-    }
-  }
+  const results: ScrapeSiteResult[] = await mapWithConcurrency(sites, SITE_CONCURRENCY, crawlSite);
 
   const summary = {
     new: results.filter((r) => r.status === "new").length,
@@ -92,8 +39,11 @@ if (process.argv[1]?.endsWith("run.ts")) {
   runScrape(process.argv[2])
     .then((report) => {
       for (const r of report.results) {
-        const note = r.status === "unchanged" ? "(skipped — unchanged)" : `${r.chars} chars`;
-        console.log(`  ${r.status === "failed" ? "✗" : "✓"} ${r.label} — ${r.status} ${note}`);
+        const p = r.pages;
+        console.log(
+          `  ${r.status === "failed" ? "✗" : "✓"} ${r.label} — ${r.status} ` +
+            `(${p.discovered} pages: ${p.changed} changed, ${p.unchanged} unchanged, ${p.failed} failed)`,
+        );
       }
       const s = report.summary;
       console.log(`Done: ${s.new} new, ${s.updated} updated, ${s.unchanged} unchanged, ${s.failed} failed.`);

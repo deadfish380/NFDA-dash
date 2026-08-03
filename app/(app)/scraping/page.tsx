@@ -1,7 +1,7 @@
 import { ScrapingConsole } from "@/components/scrape/scraping-console";
-import { getScrapedItems, getScrapeSchedules } from "@/lib/data";
+import { getCrawledPages, getScrapeSchedules } from "@/lib/data";
 
 export default async function ScrapingPage() {
-  const [items, schedules] = await Promise.all([getScrapedItems(), getScrapeSchedules()]);
-  return <ScrapingConsole items={items} schedules={schedules} />;
+  const [pages, schedules] = await Promise.all([getCrawledPages(), getScrapeSchedules()]);
+  return <ScrapingConsole pages={pages} schedules={schedules} />;
 }

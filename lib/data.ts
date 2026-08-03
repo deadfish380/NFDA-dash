@@ -2,7 +2,7 @@ import "server-only";
 import { asc, desc, eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import type { Organization, Post, Website } from "@/lib/mock-data";
-import type { ScrapedItem } from "@/lib/scrape/types";
+import type { CrawledPage, ScrapedItem } from "@/lib/scrape/types";
 
 /**
  * Server-only data access. Reads DB rows and maps them to the serializable DTO
@@ -73,8 +73,11 @@ export async function getAllPosts(): Promise<Post[]> {
   return rows.map(toPost);
 }
 
-/** Every stored content row, newest first — for the scraping-console table. */
-export async function getScrapedItems(): Promise<ScrapedItem[]> {
+/**
+ * Recent stored content rows, newest first — for the scraping-console table.
+ * Bounded so a long history never ships the whole table to the client.
+ */
+export async function getScrapedItems(limit = 500): Promise<ScrapedItem[]> {
   const rows = await db
     .select({
       id: schema.contentItems.id,
@@ -88,7 +91,8 @@ export async function getScrapedItems(): Promise<ScrapedItem[]> {
     })
     .from(schema.contentItems)
     .leftJoin(schema.websites, eq(schema.contentItems.websiteId, schema.websites.id))
-    .orderBy(desc(schema.contentItems.scrapedAt));
+    .orderBy(desc(schema.contentItems.scrapedAt))
+    .limit(limit);
 
   return rows.map((r) => ({
     id: r.id,
@@ -99,6 +103,47 @@ export async function getScrapedItems(): Promise<ScrapedItem[]> {
     chars: r.body.length,
     hasImage: Boolean(r.imageUrl),
     scrapedAt: toISOStringOrNull(r.scrapedAt) ?? new Date(0).toISOString(),
+  }));
+}
+
+/**
+ * Current crawl state of every discovered URL — powers the coverage view. One
+ * row per page (not versioned), newest crawl first. Bounded for safety.
+ */
+export async function getCrawledPages(limit = 2000): Promise<CrawledPage[]> {
+  const rows = await db
+    .select({
+      id: schema.pages.id,
+      orgId: schema.pages.orgId,
+      websiteId: schema.pages.websiteId,
+      url: schema.pages.url,
+      title: schema.pages.title,
+      status: schema.pages.status,
+      chars: schema.pages.chars,
+      hasImage: schema.pages.hasImage,
+      discoveredVia: schema.pages.discoveredVia,
+      error: schema.pages.error,
+      lastCrawledAt: schema.pages.lastCrawledAt,
+      websiteLabel: schema.websites.label,
+    })
+    .from(schema.pages)
+    .leftJoin(schema.websites, eq(schema.pages.websiteId, schema.websites.id))
+    .orderBy(desc(schema.pages.lastCrawledAt))
+    .limit(limit);
+
+  return rows.map((r) => ({
+    id: r.id,
+    orgId: r.orgId,
+    websiteId: r.websiteId,
+    websiteLabel: r.websiteLabel ?? r.url.replace(/^https?:\/\//, ""),
+    url: r.url,
+    title: r.title,
+    status: (r.status as CrawledPage["status"]) ?? "crawled",
+    chars: r.chars,
+    hasImage: r.hasImage,
+    discoveredVia: r.discoveredVia,
+    error: r.error,
+    lastCrawledAt: toISOStringOrNull(r.lastCrawledAt),
   }));
 }
 

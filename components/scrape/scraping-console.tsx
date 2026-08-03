@@ -1,8 +1,19 @@
 "use client";
 
-import { CheckCircle2, Clock, Globe, ImageIcon, Loader2, RefreshCw, XCircle } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  Globe,
+  ImageIcon,
+  Loader2,
+  RefreshCw,
+  XCircle,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { ScrapeCanvas } from "@/components/scrape/scrape-canvas";
 import { Reveal } from "@/components/motion/reveal";
 import { useOrg } from "@/components/shell/org-context";
@@ -10,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { scrapeOrg, setScrapeTime } from "@/app/actions";
-import type { ScrapedItem, ScrapeReport } from "@/lib/scrape/types";
+import type { CrawledPage, ScrapeReport } from "@/lib/scrape/types";
 import { cn } from "@/lib/utils";
 
 const dateFmt = new Intl.DateTimeFormat("en-US", {
@@ -20,11 +31,22 @@ const dateFmt = new Intl.DateTimeFormat("en-US", {
   minute: "2-digit",
 });
 
+type SiteGroup = {
+  websiteId: string;
+  label: string;
+  pages: CrawledPage[];
+  total: number;
+  fresh: number; // last crawl stored new/updated content
+  unchanged: number; // skipped — already had it
+  failed: number;
+  lastCrawledAt: string | null;
+};
+
 export function ScrapingConsole({
-  items,
+  pages,
   schedules,
 }: {
-  items: ScrapedItem[];
+  pages: CrawledPage[];
   schedules: Record<string, string>;
 }) {
   const { activeOrg } = useOrg();
@@ -33,8 +55,35 @@ export function ScrapingConsole({
   const [savingTime, startSaveTime] = useTransition();
   const [report, setReport] = useState<ScrapeReport | null>(null);
   const [time, setTime] = useState(schedules[activeOrg.id] ?? "06:00");
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  const orgItems = items.filter((i) => i.orgId === activeOrg.id);
+  const orgPages = useMemo(() => pages.filter((p) => p.orgId === activeOrg.id), [pages, activeOrg.id]);
+
+  // Group pages by website, ordered to match the org's website list.
+  const groups = useMemo<SiteGroup[]>(() => {
+    const byId = new Map<string, CrawledPage[]>();
+    for (const p of orgPages) {
+      const arr = byId.get(p.websiteId) ?? [];
+      arr.push(p);
+      byId.set(p.websiteId, arr);
+    }
+    return activeOrg.websites.map((w) => {
+      const wp = (byId.get(w.id) ?? []).sort((a, b) => b.chars - a.chars);
+      return {
+        websiteId: w.id,
+        label: w.label,
+        pages: wp,
+        total: wp.length,
+        fresh: wp.filter((p) => p.status === "crawled").length,
+        unchanged: wp.filter((p) => p.status === "unchanged").length,
+        failed: wp.filter((p) => p.status === "failed").length,
+        lastCrawledAt:
+          wp.map((p) => p.lastCrawledAt).filter(Boolean).sort().at(-1) ?? w.lastScrapedAt ?? null,
+      };
+    });
+  }, [orgPages, activeOrg.websites]);
+
+  const totalPages = orgPages.length;
 
   function scrape() {
     startScrape(async () => {
@@ -52,18 +101,26 @@ export function ScrapingConsole({
     });
   }
 
+  function toggle(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
   return (
     <main className="flex-1 space-y-5 p-5 sm:p-6">
       <Reveal>
         <h2 className="text-lg font-semibold tracking-tight sm:text-xl">Scraping — {activeOrg.shortName}</h2>
         <p className="mt-0.5 text-sm text-muted-foreground">
-          Read {activeOrg.name}&apos;s websites into the database. Unchanged pages are skipped automatically.
+          Every page we&apos;ve read from {activeOrg.name}&apos;s websites. Unchanged pages are skipped automatically on
+          each run.
         </p>
       </Reveal>
 
-      {/* Animated pipeline */}
       <Reveal>
-        <ScrapeCanvas websiteCount={activeOrg.websites.length} itemCount={orgItems.length} active={isScraping} />
+        <ScrapeCanvas websiteCount={activeOrg.websites.length} itemCount={totalPages} active={isScraping} />
       </Reveal>
 
       {/* Controls: scrape now + schedule */}
@@ -71,40 +128,34 @@ export function ScrapingConsole({
         <Reveal className="lg:col-span-2">
           <Card className="h-full">
             <CardHeader className="flex-row items-center justify-between">
-              <CardTitle>Sources</CardTitle>
+              <CardTitle>Websites</CardTitle>
               <Button size="sm" onClick={scrape} disabled={isScraping}>
                 {isScraping ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-                {isScraping ? "Reading…" : "Scrape now"}
+                {isScraping ? "Crawling…" : "Scrape now"}
               </Button>
             </CardHeader>
             <CardContent className="space-y-2">
-              {activeOrg.websites.map((w) => (
-                <div key={w.id} className="flex items-center gap-3 rounded-md border border-border px-3 py-2">
-                  <Globe className="size-4 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{w.label}</div>
-                    <div className="text-[11px] text-muted-foreground">
-                      {w.lastScrapedAt ? `Last read ${dateFmt.format(new Date(w.lastScrapedAt))}` : "Not read yet"}
+              {groups.map((g) => (
+                <div key={g.websiteId} className="rounded-md border border-border px-3 py-2">
+                  <div className="flex items-center gap-3">
+                    <Globe className="size-4 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium">{g.label}</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {g.lastCrawledAt ? `Last crawled ${dateFmt.format(new Date(g.lastCrawledAt))}` : "Not crawled yet"}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-semibold tabular-nums">{g.total}</div>
+                      <div className="text-[11px] text-muted-foreground">pages</div>
                     </div>
                   </div>
-                  <span
-                    className={cn(
-                      "inline-flex items-center gap-1.5 rounded-full bg-muted px-2 py-1 text-[11px] font-medium",
-                      w.status === "connected" ? "text-foreground/80" : "text-muted-foreground",
-                    )}
-                  >
-                    <span className={cn("size-1.5 rounded-full", w.status === "connected" ? "bg-brand-500" : "bg-warning")} />
-                    {w.status === "connected" ? "Reading" : "Pending"}
-                  </span>
                 </div>
               ))}
 
               {report ? (
                 <div className="mt-2 rounded-md border border-border bg-muted/40 p-3">
-                  <div className="mb-1.5 text-xs text-muted-foreground">
-                    {report.summary.new} new · {report.summary.updated} updated · {report.summary.unchanged} unchanged ·{" "}
-                    {report.summary.failed} failed
-                  </div>
+                  <div className="mb-1.5 text-xs text-muted-foreground">Last run</div>
                   <ul className="space-y-1">
                     {report.results.map((r) => (
                       <li key={r.url} className="flex items-center gap-2 text-xs">
@@ -115,8 +166,8 @@ export function ScrapingConsole({
                         )}
                         <span className="font-medium">{r.label}</span>
                         <span className="text-muted-foreground">
-                          — {r.status}
-                          {r.status !== "unchanged" && r.status !== "failed" ? ` (${r.chars.toLocaleString()} chars)` : ""}
+                          — {r.pages.discovered} pages · {r.pages.changed} changed · {r.pages.unchanged} unchanged
+                          {r.pages.failed ? ` · ${r.pages.failed} failed` : ""}
                         </span>
                       </li>
                     ))}
@@ -135,7 +186,7 @@ export function ScrapingConsole({
             <CardContent className="space-y-3">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Clock className="size-4" />
-                Automatic daily scrape
+                Automatic daily crawl
               </div>
               <Input type="time" value={time} onChange={(e) => saveTime(e.target.value)} disabled={savingTime} />
               <p className="text-xs text-muted-foreground">
@@ -146,57 +197,133 @@ export function ScrapingConsole({
         </Reveal>
       </div>
 
-      {/* What's in the database */}
+      {/* Per-site crawl coverage */}
       <Reveal>
         <Card>
           <CardHeader className="flex-row items-center justify-between">
-            <CardTitle>Stored content ({orgItems.length})</CardTitle>
-            <span className="text-xs text-muted-foreground">Newest first</span>
+            <CardTitle>Crawl coverage ({totalPages} pages)</CardTitle>
+            <span className="text-xs text-muted-foreground">Click a site to see every page</span>
           </CardHeader>
-          <CardContent>
-            {orgItems.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">Nothing scraped yet — hit “Scrape now”.</p>
+          <CardContent className="space-y-3">
+            {totalPages === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">Nothing crawled yet — hit “Scrape now”.</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px] text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                      <th className="pb-2 pr-3 font-medium">Website</th>
-                      <th className="pb-2 pr-3 font-medium">Title</th>
-                      <th className="pb-2 pr-3 text-right font-medium">Chars</th>
-                      <th className="pb-2 pr-3 font-medium">Image</th>
-                      <th className="pb-2 font-medium">Scraped</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {orgItems.map((it) => (
-                      <tr key={it.id} className="border-b border-border/60 last:border-0">
-                        <td className="py-2 pr-3 align-top">
-                          <span className="font-medium">{it.websiteLabel}</span>
-                        </td>
-                        <td className="max-w-xs py-2 pr-3 align-top">
-                          <span className="line-clamp-1 text-muted-foreground">{it.title ?? "—"}</span>
-                        </td>
-                        <td className="py-2 pr-3 text-right align-top tabular-nums text-muted-foreground">
-                          {it.chars.toLocaleString()}
-                        </td>
-                        <td className="py-2 pr-3 align-top">
-                          {it.hasImage ? (
-                            <ImageIcon className="size-4 text-brand-500" />
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        <td className="py-2 align-top text-muted-foreground">{dateFmt.format(new Date(it.scrapedAt))}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              groups.map((g) => {
+                const open = expanded.has(g.websiteId);
+                return (
+                  <div key={g.websiteId} className="overflow-hidden rounded-md border border-border">
+                    <button
+                      type="button"
+                      onClick={() => toggle(g.websiteId)}
+                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/60"
+                    >
+                      {open ? (
+                        <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                      )}
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium">{g.label}</span>
+                      <span className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                        <Pill tone="brand">{g.total} pages</Pill>
+                        {g.fresh > 0 ? <Pill tone="brand">{g.fresh} fresh</Pill> : null}
+                        {g.unchanged > 0 ? <Pill tone="muted">{g.unchanged} unchanged</Pill> : null}
+                        {g.failed > 0 ? <Pill tone="danger">{g.failed} failed</Pill> : null}
+                      </span>
+                    </button>
+
+                    {open ? (
+                      <div className="overflow-x-auto border-t border-border">
+                        <table className="w-full min-w-[640px] text-sm">
+                          <thead>
+                            <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                              <th className="px-3 py-2 font-medium">Page</th>
+                              <th className="px-3 py-2 font-medium">Status</th>
+                              <th className="px-3 py-2 text-right font-medium">Chars</th>
+                              <th className="px-3 py-2 font-medium">Image</th>
+                              <th className="px-3 py-2 font-medium">Found via</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {g.pages.map((p) => (
+                              <tr key={p.id} className="border-b border-border/60 last:border-0">
+                                <td className="max-w-sm px-3 py-2 align-top">
+                                  <div className="truncate font-medium">{pathOf(p.url)}</div>
+                                  {p.title ? (
+                                    <div className="truncate text-[11px] text-muted-foreground">{p.title}</div>
+                                  ) : null}
+                                  {p.error ? (
+                                    <div className="mt-0.5 flex items-center gap-1 text-[11px] text-danger">
+                                      <AlertTriangle className="size-3" />
+                                      {p.error}
+                                    </div>
+                                  ) : null}
+                                </td>
+                                <td className="px-3 py-2 align-top">
+                                  <PageStatus status={p.status} />
+                                </td>
+                                <td className="px-3 py-2 text-right align-top tabular-nums text-muted-foreground">
+                                  {p.chars.toLocaleString()}
+                                </td>
+                                <td className="px-3 py-2 align-top">
+                                  {p.hasImage ? (
+                                    <ImageIcon className="size-4 text-brand-500" />
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 align-top text-muted-foreground">{p.discoveredVia}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })
             )}
           </CardContent>
         </Card>
       </Reveal>
     </main>
   );
+}
+
+function Pill({ tone, children }: { tone: "brand" | "muted" | "danger"; children: React.ReactNode }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5 font-medium",
+        tone === "brand" && "bg-muted text-foreground/80",
+        tone === "muted" && "bg-muted text-muted-foreground",
+        tone === "danger" && "bg-danger/10 text-danger",
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+function PageStatus({ status }: { status: CrawledPage["status"] }) {
+  const map = {
+    crawled: { label: "Fresh", dot: "bg-brand-500", text: "text-foreground/80" },
+    unchanged: { label: "Unchanged", dot: "bg-muted-foreground", text: "text-muted-foreground" },
+    failed: { label: "Failed", dot: "bg-danger", text: "text-danger" },
+  } as const;
+  const s = map[status];
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 text-xs font-medium", s.text)}>
+      <span className={cn("size-1.5 rounded-full", s.dot)} />
+      {s.label}
+    </span>
+  );
+}
+
+function pathOf(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.pathname === "/" ? "/ (home)" : u.pathname;
+  } catch {
+    return url;
+  }
 }
