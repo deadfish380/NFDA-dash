@@ -1,12 +1,18 @@
 "use server";
 
+import { createHash } from "node:crypto";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { generatePost, type GeneratedDraft } from "@/lib/ai/generate";
-import { getUserPages, postToPage } from "@/lib/facebook/client";
+import { generatePostImage } from "@/lib/ai/image";
+import { storeImage } from "@/lib/storage";
+import { getUserPages } from "@/lib/facebook/client";
 import { getOrgContent } from "@/lib/data";
+import { publishPost } from "@/lib/publish";
+import { generatePostsForOrg, type GenerateResult } from "@/lib/generate/pipeline";
+import { encryptSecret } from "@/lib/crypto";
 import { runScrape } from "@/lib/scrape/run";
 import type { ScrapeReport } from "@/lib/scrape/types";
 import type { PostStatus } from "@/lib/post-status";
@@ -26,14 +32,14 @@ export async function updatePostContent(id: string, patch: { body: string; cta: 
   refresh();
 }
 
-/** Generate a draft from scraped content + an optional idea. Not saved yet. */
+/** Generate a draft (text + image) from scraped content + an optional idea. Not saved yet. */
 export async function generateDraft(orgId: string, idea: string): Promise<GeneratedDraft> {
   const org = await db.query.organizations.findFirst({ where: eq(schema.organizations.id, orgId) });
   if (!org) throw new Error("Organization not found");
   const content = await getOrgContent(orgId);
   const site = await db.query.websites.findFirst({ where: eq(schema.websites.orgId, orgId) });
 
-  return generatePost({
+  const draft = await generatePost({
     orgName: org.name,
     brandVoice: org.brandVoice ?? "Warm, clear, community-minded.",
     ctaUrl: org.storeUrl ?? site?.url ?? "",
@@ -41,21 +47,46 @@ export async function generateDraft(orgId: string, idea: string): Promise<Genera
     content,
     idea,
   });
+
+  // Generate an image for the preview (best-effort — text still returns if it fails).
+  try {
+    const img = await generatePostImage({ orgName: org.name, imageHint: draft.imageHint, headline: draft.headline });
+    if (img) {
+      draft.imageUrl = await storeImage(img.bytes, `${orgId}/manual-${Date.now()}.png`, img.contentType, orgId);
+    }
+  } catch {
+    // no image — fine
+  }
+
+  return draft;
 }
 
 /** Save a generated draft into the review queue. */
 export async function saveDraft(orgId: string, draft: GeneratedDraft) {
+  const dedupHash = createHash("sha256")
+    .update(draft.body.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 400))
+    .digest("hex");
   await db.insert(schema.posts).values({
     orgId,
     status: "needs_review",
+    origin: "manual",
     headline: draft.headline,
     body: draft.body,
     cta: draft.cta,
     link: draft.link,
     sourceWebsite: draft.sourceWebsite,
     imageHint: draft.imageHint,
+    imageUrl: draft.imageUrl ?? null,
+    dedupHash,
   });
   refresh();
+}
+
+/** Manually run the daily generation pipeline for an org now (for testing / on-demand). */
+export async function runGenerateNow(orgId: string): Promise<GenerateResult> {
+  const result = await generatePostsForOrg(orgId, { force: true });
+  refresh();
+  return result;
 }
 
 /**
@@ -63,22 +94,7 @@ export async function saveDraft(orgId: string, draft: GeneratedDraft) {
  * lib/facebook/client. Returns whether the post was simulated so the UI can say so.
  */
 export async function publishPostNow(id: string): Promise<{ simulated: boolean }> {
-  const post = await db.query.posts.findFirst({ where: eq(schema.posts.id, id) });
-  if (!post) throw new Error("Post not found");
-  const org = await db.query.organizations.findFirst({ where: eq(schema.organizations.id, post.orgId) });
-  if (!org) throw new Error("Organization not found");
-
-  const result = await postToPage({
-    pageId: org.facebookPageId ?? "test_page",
-    pageToken: org.facebookPageToken ?? "",
-    message: post.body,
-    link: post.link,
-  });
-
-  await db
-    .update(schema.posts)
-    .set({ status: "posted", postedAt: new Date(), facebookPostId: result.id })
-    .where(eq(schema.posts.id, id));
+  const result = await publishPost(id);
   refresh();
   return { simulated: result.simulated };
 }
@@ -130,7 +146,8 @@ export async function connectSelectedPage(orgId: string, pageId: string) {
     .set({
       facebookPageId: page.id,
       facebookPage: page.name,
-      facebookPageToken: page.access_token,
+      // Encrypted at rest when APP_ENCRYPTION_KEY is set (passthrough otherwise).
+      facebookPageToken: encryptSecret(page.access_token),
       facebookConnected: true,
     })
     .where(eq(schema.organizations.id, orgId));

@@ -14,6 +14,8 @@ export type GenerateInput = {
   content: string;
   /** Optional user idea ("new logo shirt"). When absent, the model picks an angle. */
   idea?: string;
+  /** Headlines/openers of recent posts — steer the model away from repeating them. */
+  avoid?: string[];
 };
 
 export type GeneratedDraft = {
@@ -23,6 +25,8 @@ export type GeneratedDraft = {
   link: string;
   imageHint: string;
   sourceWebsite: string;
+  /** Set by the caller after image generation — the preview/post image. */
+  imageUrl?: string | null;
 };
 
 const SYSTEM = `You write Facebook posts for non-profit organizations.
@@ -37,11 +41,18 @@ Rules:
 
 function userPrompt(input: GenerateInput): string {
   const idea = input.idea?.trim();
+  const avoid = (input.avoid ?? []).filter(Boolean).slice(0, 8);
   return `Organization: ${input.orgName}
 Brand voice: ${input.brandVoice}
 CTA should link to: ${input.ctaUrl}
 ${idea ? `Post idea from the client: ${idea}` : "No specific idea — choose a strong angle from the content."}
-
+${
+  avoid.length
+    ? `\nWe have recently posted the following — write about something DIFFERENT and do not repeat these angles:\n${avoid
+        .map((a) => `- ${a}`)
+        .join("\n")}\n`
+    : ""
+}
 Website content to ground the post in:
 """
 ${input.content.slice(0, 4000)}

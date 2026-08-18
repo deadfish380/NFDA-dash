@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Facebook } from "lucide-react";
 import { connectSelectedPage } from "@/app/actions";
-import { getUserPages } from "@/lib/facebook/client";
+import { getTokenDebug, getUserPages } from "@/lib/facebook/client";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -53,9 +53,17 @@ export default async function ConnectPage({
                 </Link>
               </div>
             ) : pages.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                No pages found on this account.
-              </p>
+              <div className="space-y-3 py-2">
+                <p className="text-center text-sm text-muted-foreground">No pages found on this account.</p>
+                {userToken ? (
+                  <details open className="rounded-md border border-border bg-muted/40 p-3 text-xs">
+                    <summary className="cursor-pointer font-medium">Diagnostic (temporary)</summary>
+                    <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words text-[11px] leading-relaxed">
+                      {JSON.stringify(await getTokenDebug(userToken), null, 2)}
+                    </pre>
+                  </details>
+                ) : null}
+              </div>
             ) : (
               pages.map((page) => (
                 <form

@@ -11,12 +11,14 @@ export function PostPreview({
   cta,
   link,
   imageHint,
+  imageUrl,
 }: {
   pageName: string;
   body: string;
   cta: string;
   link: string;
   imageHint: string;
+  imageUrl?: string | null;
 }) {
   const domain = link.replace(/^https?:\/\//, "").split("/")[0];
 
@@ -38,12 +40,17 @@ export function PostPreview({
       {/* body */}
       <p className="whitespace-pre-line px-3 pb-3 text-sm leading-relaxed">{body}</p>
 
-      {/* image placeholder */}
-      <div className="flex aspect-[1.91/1] items-center justify-center border-y border-border bg-muted">
-        <div className="flex flex-col items-center gap-1.5 text-muted-foreground">
-          <ImageIcon className="size-6" />
-          <span className="px-6 text-center text-xs">{imageHint}</span>
-        </div>
+      {/* image — the real generated/scraped photo when present, else a labelled placeholder */}
+      <div className="relative flex aspect-[1.91/1] items-center justify-center overflow-hidden border-y border-border bg-muted">
+        {imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- data: and arbitrary hosts; plain img is intentional
+          <img src={imageUrl} alt={imageHint} className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex flex-col items-center gap-1.5 text-muted-foreground">
+            <ImageIcon className="size-6" />
+            <span className="px-6 text-center text-xs">{imageHint}</span>
+          </div>
+        )}
       </div>
 
       {/* link card */}

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/input";
 import { useOrg } from "@/components/shell/org-context";
-import { generateDraft, saveDraft } from "@/app/actions";
+import { generateDraft, runGenerateNow, saveDraft } from "@/app/actions";
 
 type Draft = {
   headline: string;
@@ -18,6 +18,7 @@ type Draft = {
   link: string;
   imageHint: string;
   sourceWebsite: string;
+  imageUrl?: string | null;
 };
 
 const IDEAS = [
@@ -33,8 +34,10 @@ export default function GeneratePage() {
   const [idea, setIdea] = useState("");
   const [draft, setDraft] = useState<Draft | null>(null);
   const [added, setAdded] = useState(false);
+  const [autoMsg, setAutoMsg] = useState<string | null>(null);
   const [generating, startGenerate] = useTransition();
   const [saving, startSave] = useTransition();
+  const [autoRunning, startAuto] = useTransition();
 
   function generate() {
     if (!idea.trim()) return;
@@ -42,6 +45,19 @@ export default function GeneratePage() {
     startGenerate(async () => {
       const d = await generateDraft(activeOrg.id, idea);
       setDraft(d);
+    });
+  }
+
+  function autoGenerate() {
+    setAutoMsg(null);
+    startAuto(async () => {
+      const r = await runGenerateNow(activeOrg.id);
+      router.refresh();
+      setAutoMsg(
+        r.created > 0
+          ? `Created ${r.created} post${r.created === 1 ? "" : "s"} in the review queue.`
+          : `No posts created${r.reason ? ` — ${r.reason}` : ""}.`,
+      );
     });
   }
 
@@ -61,6 +77,23 @@ export default function GeneratePage() {
         <p className="mt-0.5 text-sm text-muted-foreground">
           Type an idea. It&apos;s combined with {activeOrg.shortName}&apos;s website content into a ready-to-approve post.
         </p>
+      </Reveal>
+
+      <Reveal className="mb-4">
+        <Card className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="text-sm font-medium">Auto-generate today&apos;s posts</div>
+            <p className="text-xs text-muted-foreground">
+              Runs the daily pipeline now — writes {activeOrg.postsPerDay} post{activeOrg.postsPerDay === 1 ? "" : "s"} from
+              your scraped content, with images, into the review queue.
+            </p>
+            {autoMsg ? <p className="mt-1 text-xs text-primary">{autoMsg}</p> : null}
+          </div>
+          <Button variant="outline" onClick={autoGenerate} disabled={autoRunning} className="shrink-0">
+            {autoRunning ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+            {autoRunning ? "Generating…" : "Generate now"}
+          </Button>
+        </Card>
       </Reveal>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -117,6 +150,7 @@ export default function GeneratePage() {
                 cta={draft.cta}
                 link={draft.link}
                 imageHint={draft.imageHint}
+                imageUrl={draft.imageUrl}
               />
               <div className="flex gap-2">
                 <Button onClick={add} disabled={added || saving} className="flex-1">

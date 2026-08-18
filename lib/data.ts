@@ -55,6 +55,7 @@ function toPost(p: typeof schema.posts.$inferSelect): Post {
     link: p.link,
     sourceWebsite: p.sourceWebsite,
     imageHint: p.imageHint,
+    imageUrl: p.imageUrl,
     scheduledFor: toISOStringOrNull(p.scheduledFor),
     createdAt: toISOStringOrNull(p.createdAt) ?? new Date(0).toISOString(),
   };
@@ -162,4 +163,42 @@ export async function getOrgContent(orgId: string): Promise<string> {
     .from(schema.contentItems)
     .where(eq(schema.contentItems.orgId, orgId));
   return rows.map((r) => r.body).join("\n\n");
+}
+
+export type ContentSource = {
+  id: string;
+  sourceUrl: string;
+  title: string | null;
+  body: string;
+  imageUrl: string | null;
+};
+
+/**
+ * One row per source URL for an org — the latest scraped version of each page —
+ * so the generation pipeline can rotate through distinct pages instead of blending
+ * the whole site into one blob. Newest content first.
+ */
+export async function getOrgContentSources(orgId: string): Promise<ContentSource[]> {
+  const rows = await db
+    .select({
+      id: schema.contentItems.id,
+      sourceUrl: schema.contentItems.sourceUrl,
+      title: schema.contentItems.title,
+      body: schema.contentItems.body,
+      imageUrl: schema.contentItems.imageUrl,
+      scrapedAt: schema.contentItems.scrapedAt,
+    })
+    .from(schema.contentItems)
+    .where(eq(schema.contentItems.orgId, orgId))
+    .orderBy(desc(schema.contentItems.scrapedAt));
+
+  // Keep only the newest version of each URL, preserving newest-first order.
+  const seen = new Set<string>();
+  const out: ContentSource[] = [];
+  for (const r of rows) {
+    if (seen.has(r.sourceUrl)) continue;
+    seen.add(r.sourceUrl);
+    out.push({ id: r.id, sourceUrl: r.sourceUrl, title: r.title, body: r.body, imageUrl: r.imageUrl });
+  }
+  return out;
 }

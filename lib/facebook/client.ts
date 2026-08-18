@@ -59,6 +59,33 @@ export async function getUserPages(userToken: string): Promise<FacebookPage[]> {
 }
 
 /**
+ * TEMP DIAGNOSTIC — shows what the token actually carries so we can see why no
+ * pages come back: which permissions were granted vs declined, and the raw
+ * /me/accounts payload. Safe to delete once the connection works.
+ */
+export async function getTokenDebug(userToken: string): Promise<Record<string, unknown>> {
+  // One call at a time, each with its own error captured and a single retry —
+  // a transient "fetch failed" on one endpoint shouldn't blank out the others.
+  const call = async (path: string, params: Record<string, string>) => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await graphGet(path, { access_token: userToken, ...params });
+      } catch (err) {
+        if (attempt === 1) return { __error: (err as Error).message };
+      }
+    }
+  };
+
+  return {
+    tokenLength: userToken.length,
+    me: await call("/me", { fields: "id,name" }),
+    permissions: await call("/me/permissions", {}),
+    accounts: await call("/me/accounts", { fields: "id,name,tasks" }),
+    accounts_via_business: await call("/me/businesses", { fields: "id,name" }),
+  };
+}
+
+/**
  * Publish (or schedule) a post to a page. In dry-run mode this is simulated and
  * NEVER touches Facebook — it returns a fake id so the pipeline works end-to-end.
  * @param scheduledFor optional future time; Facebook schedules instead of publishing now.
@@ -68,31 +95,65 @@ export async function postToPage(opts: {
   pageToken: string;
   message: string;
   link?: string;
+  /** Public https image URL — posts a photo instead of a plain feed post. */
+  imageUrl?: string | null;
   scheduledFor?: Date | null;
 }): Promise<{ id: string; simulated: boolean }> {
   if (DRY_RUN) {
     return { id: `dryrun_${opts.pageId}_${Date.now()}`, simulated: true };
   }
 
-  const body: Record<string, string> = { message: opts.message, access_token: opts.pageToken };
-  if (opts.link) body.link = opts.link;
-  if (opts.scheduledFor) {
+  // Facebook can't fetch a data: URL — only attach a real hosted image.
+  const hasImage = Boolean(opts.imageUrl && /^https?:\/\//.test(opts.imageUrl));
+  const body: Record<string, string> = { access_token: opts.pageToken };
+  if (opts.scheduledFor && opts.scheduledFor.getTime() > Date.now()) {
     body.published = "false";
     body.scheduled_publish_time = String(Math.floor(opts.scheduledFor.getTime() / 1000));
   }
 
-  const res = await fetch(`${GRAPH}/${opts.pageId}/feed`, {
+  let endpoint: string;
+  if (hasImage) {
+    // Photo post: the link (if any) rides along in the caption text.
+    endpoint = `${GRAPH}/${opts.pageId}/photos`;
+    body.url = opts.imageUrl as string;
+    body.caption = opts.link ? `${opts.message}\n\n${opts.link}` : opts.message;
+  } else {
+    endpoint = `${GRAPH}/${opts.pageId}/feed`;
+    body.message = opts.message;
+    if (opts.link) body.link = opts.link;
+  }
+
+  const res = await graphFetch(endpoint, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams(body),
   });
   const json = await res.json();
   if (!res.ok) throw new Error(json?.error?.message ?? `Facebook post failed (${res.status})`);
-  return { id: json.id as string, simulated: false };
+  // Photo posts return { id, post_id } — prefer the feed post id when present.
+  return { id: (json.post_id ?? json.id) as string, simulated: false };
+}
+
+// Graph API calls must never hang a page render — fetch has no default timeout.
+const GRAPH_TIMEOUT_MS = 10_000;
+
+async function graphFetch(url: string, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), GRAPH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError")) {
+      throw new Error(`Facebook request timed out after ${GRAPH_TIMEOUT_MS}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function graphGet(path: string, params: Record<string, string>) {
-  const res = await fetch(`${GRAPH}${path}?${new URLSearchParams(params)}`);
+  const res = await graphFetch(`${GRAPH}${path}?${new URLSearchParams(params)}`);
   const json = await res.json();
   if (!res.ok) throw new Error(json?.error?.message ?? `Facebook request failed (${res.status})`);
   return json;

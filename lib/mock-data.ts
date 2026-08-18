@@ -40,6 +40,7 @@ export type Post = {
   link: string;
   sourceWebsite: string;
   imageHint: string;
+  imageUrl?: string | null;
   scheduledFor: string | null;
   createdAt: string;
 };

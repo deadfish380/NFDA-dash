@@ -176,6 +176,7 @@ export function QueueView() {
                       cta={preview.cta}
                       link={preview.link}
                       imageHint={post.imageHint}
+                      imageUrl={post.imageUrl}
                     />
                   </div>
                 </Card>

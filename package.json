@@ -11,7 +11,8 @@
     "db:up": "docker compose up -d",
     "db:push": "drizzle-kit push",
     "db:seed": "tsx --env-file=.env.local lib/db/seed.ts",
-    "scrape": "tsx --env-file=.env.local lib/scrape/run.ts"
+    "scrape": "tsx --env-file=.env.local lib/scrape/run.ts",
+    "generate": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env.local lib/generate/run.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

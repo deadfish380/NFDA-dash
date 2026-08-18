@@ -136,6 +136,12 @@ export const posts = pgTable(
     sourceWebsite: text("source_website").notNull(),
     imageHint: text("image_hint").notNull().default(""),
     imageUrl: text("image_url"),
+    // Which scraped content this post was written from — provenance + rotation.
+    contentItemId: uuid("content_item_id"),
+    // Normalized-body fingerprint — so the generator never re-saves a near-identical post.
+    dedupHash: text("dedup_hash"),
+    // How the draft was produced: manual (idea) | auto (daily pipeline).
+    origin: text("origin").notNull().default("manual"),
     scheduledFor: timestamp("scheduled_for", { withTimezone: true }),
     postedAt: timestamp("posted_at", { withTimezone: true }),
     facebookPostId: text("facebook_post_id"),
@@ -147,8 +153,25 @@ export const posts = pgTable(
     index("posts_org_status_idx").on(t.orgId, t.status),
     // The publish cron scans for scheduled posts whose time has come.
     index("posts_status_scheduled_idx").on(t.status, t.scheduledFor),
+    // Dedup lookup — has this org posted something like this recently?
+    index("posts_org_dedup_idx").on(t.orgId, t.dedupHash),
   ],
 );
+
+/**
+ * Generated post images, kept out of the `posts` row so the app-wide posts query
+ * never drags image bytes around. Served by /api/post-image/[id] — a tiny stable
+ * URL that Facebook can also load in production. Only used when Supabase Storage
+ * isn't configured (which returns CDN URLs instead).
+ */
+export const postImages = pgTable("post_images", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orgId: text("org_id"),
+  contentType: text("content_type").notNull().default("image/png"),
+  // base64-encoded image bytes.
+  data: text("data").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export type Organization = typeof organizations.$inferSelect;
 export type Website = typeof websites.$inferSelect;
