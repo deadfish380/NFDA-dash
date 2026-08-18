@@ -54,5 +54,19 @@ export async function storeImage(
     .insert(schema.postImages)
     .values({ orgId: orgId ?? null, contentType, data: bytes.toString("base64") })
     .returning({ id: schema.postImages.id });
-  return `/api/post-image/${row.id}`;
+
+  // Facebook fetches the image by URL, so it must be ABSOLUTE in production.
+  // Locally there's no public base, so we return a relative path (preview only).
+  const origin = publicBaseUrl();
+  const path = `/api/post-image/${row.id}`;
+  return origin ? `${origin}${path}` : path;
+}
+
+/** The app's public origin, for building absolute image URLs Facebook can fetch. */
+function publicBaseUrl(): string | null {
+  if (process.env.APP_BASE_URL) return process.env.APP_BASE_URL.replace(/\/$/, "");
+  // Vercel exposes the stable production domain here.
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return null;
 }

@@ -58,32 +58,6 @@ export async function getUserPages(userToken: string): Promise<FacebookPage[]> {
   return (res.data ?? []) as FacebookPage[];
 }
 
-/**
- * TEMP DIAGNOSTIC — shows what the token actually carries so we can see why no
- * pages come back: which permissions were granted vs declined, and the raw
- * /me/accounts payload. Safe to delete once the connection works.
- */
-export async function getTokenDebug(userToken: string): Promise<Record<string, unknown>> {
-  // One call at a time, each with its own error captured and a single retry —
-  // a transient "fetch failed" on one endpoint shouldn't blank out the others.
-  const call = async (path: string, params: Record<string, string>) => {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        return await graphGet(path, { access_token: userToken, ...params });
-      } catch (err) {
-        if (attempt === 1) return { __error: (err as Error).message };
-      }
-    }
-  };
-
-  return {
-    tokenLength: userToken.length,
-    me: await call("/me", { fields: "id,name" }),
-    permissions: await call("/me/permissions", {}),
-    accounts: await call("/me/accounts", { fields: "id,name,tasks" }),
-    accounts_via_business: await call("/me/businesses", { fields: "id,name" }),
-  };
-}
 
 /**
  * Publish (or schedule) a post to a page. In dry-run mode this is simulated and
