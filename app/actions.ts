@@ -8,7 +8,7 @@ import { db, schema } from "@/lib/db";
 import { generatePost, type GeneratedDraft } from "@/lib/ai/generate";
 import { generatePostImage } from "@/lib/ai/image";
 import { storeImage } from "@/lib/storage";
-import { getUserPages } from "@/lib/facebook/client";
+import { getPageByToken, getUserPages } from "@/lib/facebook/client";
 import { getOrgContent } from "@/lib/data";
 import { publishPost } from "@/lib/publish";
 import { generatePostsForOrg, type GenerateResult } from "@/lib/generate/pipeline";
@@ -159,6 +159,38 @@ export async function connectSelectedPage(orgId: string, pageId: string) {
 
   jar.delete("fb_user_token");
   refresh();
+}
+
+/**
+ * Connect a page by pasting a Page ID + token directly — the reliable path for
+ * business-owned pages, which the OAuth picker can't see. Verifies the token
+ * against Facebook before storing it (encrypted).
+ */
+export async function connectPageWithToken(
+  orgId: string,
+  pageId: string,
+  token: string,
+): Promise<{ ok: boolean; pageName?: string; error?: string }> {
+  const id = pageId.trim();
+  const tok = token.trim();
+  if (!id || !tok) return { ok: false, error: "Enter both a Page ID and a token." };
+
+  try {
+    const page = await getPageByToken(id, tok);
+    await db
+      .update(schema.organizations)
+      .set({
+        facebookPageId: page.id,
+        facebookPage: page.name,
+        facebookPageToken: encryptSecret(page.access_token),
+        facebookConnected: true,
+      })
+      .where(eq(schema.organizations.id, orgId));
+    refresh();
+    return { ok: true, pageName: page.name };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message.slice(0, 200) };
+  }
 }
 
 /** Create a new organization (+ optional first website). Multi-org = new data. */

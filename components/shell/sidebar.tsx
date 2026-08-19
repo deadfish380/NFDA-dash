@@ -6,6 +6,7 @@ import {
   Sparkles,
   Waypoints,
   Building2,
+  Plug,
   Settings,
   HandCoins,
   X,
@@ -24,6 +25,7 @@ export const APP_NAV: NavItem[] = [
   { href: "/generate", label: "Generate", icon: Sparkles },
   { href: "/scraping", label: "Scraping", icon: Waypoints },
   { href: "/organizations", label: "Organizations", icon: Building2 },
+  { href: "/connections", label: "Connections", icon: Plug },
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/grants", label: "Grants", icon: HandCoins, soon: true },
 ];

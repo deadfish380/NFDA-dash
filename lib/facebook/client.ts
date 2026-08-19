@@ -58,6 +58,17 @@ export async function getUserPages(userToken: string): Promise<FacebookPage[]> {
   return (res.data ?? []) as FacebookPage[];
 }
 
+/**
+ * Look up a page directly by id using a token — used to connect a business-owned
+ * page via a System User token (which the normal /me/accounts flow can't see).
+ * Throws if the token can't access the page. Returns a page-scoped token when the
+ * response carries one, else the supplied token (system-user tokens post fine).
+ */
+export async function getPageByToken(pageId: string, token: string): Promise<FacebookPage> {
+  const res = await graphGet(`/${pageId}`, { access_token: token, fields: "id,name,access_token" });
+  return { id: res.id as string, name: res.name as string, access_token: (res.access_token as string) ?? token };
+}
+
 
 /**
  * Publish (or schedule) a post to a page. In dry-run mode this is simulated and
