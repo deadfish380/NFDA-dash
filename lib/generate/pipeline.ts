@@ -86,24 +86,38 @@ export async function generatePostsForOrg(
   let skipped = 0;
   let srcIdx = 0;
 
-  while (created < count && srcIdx < pool.length) {
+  // Phase 1 — write all the post TEXTS first. Sequential, because dedup checks
+  // each new post against the ones written before it in this run.
+  const prepared: { draft: GeneratedDraft; src: ContentSource; hash: string }[] = [];
+  while (prepared.length < count && srcIdx < pool.length) {
     const src = pool[srcIdx++];
-
     const draft = await writeUnique(org, src, ctaUrl, avoid, usedHashes, recentNorms);
     if (!draft) {
       skipped++;
       continue;
     }
-
     const hash = dedupHash(draft.body);
     usedHashes.add(hash);
     recentNorms.push(normalize(draft.body));
     avoid.unshift(draft.headline);
+    prepared.push({ draft, src, hash });
+  }
 
-    const imageUrl = await makeImage(org.name, draft, orgId, hash, created).catch(() => src.imageUrl ?? null);
+  // Phase 2 — generate ALL images at once. Each image takes ~20s, so running
+  // them in parallel makes a batch cost one wait instead of N. A failed image
+  // falls back to the page's scraped image.
+  const imageUrls = await Promise.all(
+    prepared.map((p, i) =>
+      makeImage(org.name, p.draft, orgId, p.hash, i).catch(() => p.src.imageUrl ?? null),
+    ),
+  );
 
+  // Phase 3 — store the posts.
+  for (let i = 0; i < prepared.length; i++) {
+    const { draft, src, hash } = prepared[i];
+    const imageUrl = imageUrls[i] ?? src.imageUrl ?? null;
     const status: PostStatus = org.autoApprove ? "scheduled" : "needs_review";
-    const scheduledFor = org.autoApprove ? (slots[created] ?? null) : null;
+    const scheduledFor = org.autoApprove ? (slots[i] ?? null) : null;
 
     await db.insert(schema.posts).values({
       orgId,
@@ -115,14 +129,14 @@ export async function generatePostsForOrg(
       link: draft.link,
       sourceWebsite: draft.sourceWebsite,
       imageHint: draft.imageHint,
-      imageUrl: imageUrl ?? src.imageUrl ?? null,
+      imageUrl,
       contentItemId: src.id,
       dedupHash: hash,
       scheduledFor,
     });
 
     created++;
-    posts.push({ headline: draft.headline, status, hasImage: Boolean(imageUrl ?? src.imageUrl) });
+    posts.push({ headline: draft.headline, status, hasImage: Boolean(imageUrl) });
   }
 
   return { orgId, created, skipped, posts };

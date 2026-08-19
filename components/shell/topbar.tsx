@@ -1,12 +1,13 @@
 "use client";
 
-import { Facebook, FlaskConical, Menu } from "lucide-react";
+import { Facebook, FlaskConical, LogOut, Menu } from "lucide-react";
 import { useOrg } from "@/components/shell/org-context";
 import { useShell } from "@/components/shell/shell-context";
 import { cn } from "@/lib/utils";
+import { logout } from "@/app/login/actions";
 import { ThemeToggle } from "./theme-toggle";
 
-export function Topbar({ title, dryRun }: { title: string; dryRun: boolean }) {
+export function Topbar({ title, dryRun, authEnabled }: { title: string; dryRun: boolean; authEnabled: boolean }) {
   const { openMobileNav } = useShell();
   const { activeOrg } = useOrg();
 
@@ -41,6 +42,17 @@ export function Topbar({ title, dryRun }: { title: string; dryRun: boolean }) {
           {activeOrg.facebookConnected ? "Facebook connected" : "Not connected"}
         </span>
         <ThemeToggle />
+        {authEnabled ? (
+          <form action={logout}>
+            <button
+              type="submit"
+              aria-label="Sign out"
+              className="flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <LogOut className="size-4" />
+            </button>
+          </form>
+        ) : null}
       </div>
     </header>
   );

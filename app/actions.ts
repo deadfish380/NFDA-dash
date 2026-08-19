@@ -82,9 +82,14 @@ export async function saveDraft(orgId: string, draft: GeneratedDraft) {
   refresh();
 }
 
-/** Manually run the daily generation pipeline for an org now (for testing / on-demand). */
+/**
+ * Run the daily generation pipeline for an org on demand. Behaves exactly like
+ * the real 6am cron: idempotent — if today's batch already exists it does nothing
+ * and reports "already generated today", so clicking it repeatedly never piles up
+ * duplicate posts. (The `npm run generate` CLI still forces, for dev testing.)
+ */
 export async function runGenerateNow(orgId: string): Promise<GenerateResult> {
-  const result = await generatePostsForOrg(orgId, { force: true });
+  const result = await generatePostsForOrg(orgId, { force: false });
   refresh();
   return result;
 }

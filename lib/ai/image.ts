@@ -12,6 +12,9 @@ export type GeneratedImage = { bytes: Buffer; contentType: string };
 const IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-1";
 // gpt-image-1 landscape size (≈3:2). dall-e-3 users can set 1792x1024 via env.
 const IMAGE_SIZE = process.env.OPENAI_IMAGE_SIZE ?? "1536x1024";
+// "medium" is the sweet spot: great quality at ~20s. "high" looks marginally
+// better but takes ~115s/image (too slow). Override with OPENAI_IMAGE_QUALITY.
+const IMAGE_QUALITY = process.env.OPENAI_IMAGE_QUALITY ?? "medium";
 
 /** True unless explicitly turned off — lets you disable paid image calls in tests. */
 export function imagesEnabled(): boolean {
@@ -36,7 +39,7 @@ export async function generatePostImage(input: {
     prompt,
     size: IMAGE_SIZE,
     n: 1,
-    ...(isGptImage ? { quality: "medium", output_format: "jpeg" } : {}),
+    ...(isGptImage ? { quality: IMAGE_QUALITY, output_format: "jpeg" } : {}),
   } as Parameters<typeof client.images.generate>[0])) as unknown as {
     data?: Array<{ b64_json?: string | null; url?: string | null }>;
   };

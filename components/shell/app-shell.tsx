@@ -17,11 +17,13 @@ export function AppShell({
   orgs,
   posts,
   dryRun,
+  authEnabled,
   children,
 }: {
   orgs: Organization[];
   posts: Post[];
   dryRun: boolean;
+  authEnabled: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -32,7 +34,7 @@ export function AppShell({
         <Sidebar />
         <MobileNav />
         <div className="flex min-w-0 flex-1 flex-col">
-          <Topbar title={titleFor(pathname)} dryRun={dryRun} />
+          <Topbar title={titleFor(pathname)} dryRun={dryRun} authEnabled={authEnabled} />
           {children}
         </div>
       </div>

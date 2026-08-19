@@ -7,8 +7,9 @@ export const dynamic = "force-dynamic";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const [orgs, posts] = await Promise.all([getOrganizations(), getAllPosts()]);
   const dryRun = process.env.FACEBOOK_DRY_RUN !== "false";
+  const authEnabled = Boolean(process.env.ADMIN_PASSWORD);
   return (
-    <AppShell orgs={orgs} posts={posts} dryRun={dryRun}>
+    <AppShell orgs={orgs} posts={posts} dryRun={dryRun} authEnabled={authEnabled}>
       {children}
     </AppShell>
   );
