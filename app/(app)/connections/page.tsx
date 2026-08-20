@@ -174,7 +174,7 @@ function OrgConnectionCard({ org }: { org: Organization }) {
 
       <CardContent className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <Link href={`/api/facebook/login?orgId=${org.id}`} className={cn(buttonVariants({ size: "sm", variant: "outline" }))}>
+          <Link href={`/api/facebook/login?orgId=${org.id}`} prefetch={false} className={cn(buttonVariants({ size: "sm", variant: "outline" }))}>
             <Facebook className="size-4" /> Connect with Facebook
           </Link>
           <Button size="sm" variant="outline" onClick={() => setShowPaste((v) => !v)}>

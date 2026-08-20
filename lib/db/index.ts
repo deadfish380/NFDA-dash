@@ -16,7 +16,6 @@ import * as schema from "./schema";
 const LOCAL_DEFAULT = "postgres://nfda:nfda@localhost:5434/nfda";
 const connectionString = process.env.DATABASE_URL ?? LOCAL_DEFAULT;
 const isLocal = /localhost|127\.0\.0\.1/.test(connectionString);
-const isDev = process.env.NODE_ENV !== "production";
 
 const globalForDb = globalThis as unknown as { __pg?: ReturnType<typeof postgres> };
 
@@ -25,9 +24,11 @@ const client =
   postgres(connectionString, {
     prepare: false,
     ssl: isLocal ? false : "require",
-    // Local/dev: a real pool so concurrent queries don't collide. Serverless
-    // prod: small, since each warm instance holds its own pool.
-    max: isLocal ? 10 : isDev ? 5 : 2,
+    // A real pool everywhere: with too few connections, concurrent queries share
+    // one pgbouncer connection and their responses interleave, crashing drizzle
+    // ("Cannot read properties of undefined (reading 'map')"). The Supabase
+    // transaction pooler multiplexes these fine.
+    max: isLocal ? 10 : 5,
     idle_timeout: 20,
     connect_timeout: 15,
   });

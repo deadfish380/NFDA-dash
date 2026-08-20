@@ -47,7 +47,7 @@ export default async function ConnectPage({
             {error ? (
               <div className="space-y-3 py-2 text-center">
                 <p className="text-sm text-muted-foreground">{error}</p>
-                <Link href={`/api/facebook/login?orgId=${orgId}`} className={cn(buttonVariants({ size: "sm" }))}>
+                <Link href={`/api/facebook/login?orgId=${orgId}`} prefetch={false} className={cn(buttonVariants({ size: "sm" }))}>
                   <Facebook className="size-4" /> Connect again
                 </Link>
               </div>

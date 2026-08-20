@@ -62,10 +62,10 @@ function toPost(p: typeof schema.posts.$inferSelect): Post {
 }
 
 export async function getOrganizations(): Promise<Organization[]> {
-  const [orgs, sites] = await Promise.all([
-    db.select().from(schema.organizations).orderBy(asc(schema.organizations.createdAt)),
-    db.select().from(schema.websites).orderBy(asc(schema.websites.createdAt)),
-  ]);
+  // Sequential (not Promise.all): two concurrent queries on the transaction
+  // pooler can interleave and crash drizzle's row mapper.
+  const orgs = await db.select().from(schema.organizations).orderBy(asc(schema.organizations.createdAt));
+  const sites = await db.select().from(schema.websites).orderBy(asc(schema.websites.createdAt));
   return orgs.map((o) => toOrg(o, sites.filter((s) => s.orgId === o.id).map(toWebsite)));
 }
 

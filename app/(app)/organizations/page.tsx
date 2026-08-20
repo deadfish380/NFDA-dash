@@ -87,7 +87,7 @@ function OrgCard({ org }: { org: Organization }) {
             </Button>
           </div>
         ) : (
-          <Link href={`/api/facebook/login?orgId=${org.id}`} className={cn(buttonVariants({ size: "sm" }))}>
+          <Link href={`/api/facebook/login?orgId=${org.id}`} prefetch={false} className={cn(buttonVariants({ size: "sm" }))}>
             <Facebook className="size-4" /> Connect page
           </Link>
         )}
