@@ -1,7 +1,7 @@
 "use client";
 
 import { Lock, Loader2 } from "lucide-react";
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { login } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +9,15 @@ import { Input, Label } from "@/components/ui/input";
 
 export default function LoginPage() {
   const [state, action, pending] = useActionState(login, null);
+
+  // On success, do a FULL-PAGE navigation so the freshly-set cookie is sent and
+  // middleware re-evaluates (avoids the soft-nav redirect loop back to /login).
+  useEffect(() => {
+    if (state?.ok) {
+      const next = new URLSearchParams(window.location.search).get("next") || "/";
+      window.location.assign(next.startsWith("/") ? next : "/");
+    }
+  }, [state]);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-muted/30 p-6">

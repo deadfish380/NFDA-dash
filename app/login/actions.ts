@@ -6,11 +6,15 @@ import { redirect } from "next/navigation";
 const COOKIE = "nfda_session";
 const THIRTY_DAYS = 60 * 60 * 24 * 30;
 
-/** Verify the admin email/password from env and open a session on success. */
-export async function login(
-  _prev: { error: string } | null,
-  formData: FormData,
-): Promise<{ error: string } | null> {
+export type LoginState = { error?: string; ok?: boolean } | null;
+
+/**
+ * Verify the admin email/password and open a session. Returns { ok: true } rather
+ * than redirecting from the action — the client then does a full-page navigation,
+ * which reliably carries the just-set cookie (a server-action redirect + cookie
+ * can race under useActionState and loop back to /login).
+ */
+export async function login(_prev: LoginState, formData: FormData): Promise<LoginState> {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
 
@@ -18,8 +22,7 @@ export async function login(
   const adminPassword = process.env.ADMIN_PASSWORD;
 
   if (!adminPassword) {
-    // Gate isn't configured — nothing to log into.
-    redirect("/");
+    return { ok: true }; // gate isn't configured — let them in
   }
   const emailOk = !adminEmail || email === adminEmail;
   const passwordOk = password === adminPassword;
@@ -35,7 +38,7 @@ export async function login(
     path: "/",
     maxAge: THIRTY_DAYS,
   });
-  redirect("/");
+  return { ok: true };
 }
 
 /** End the session. */
