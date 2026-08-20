@@ -2,7 +2,6 @@
 
 import { Check, ChevronDown, Facebook, HelpCircle, KeyRound, Loader2, Unplug } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Reveal } from "@/components/motion/reveal";
 import { useOrg } from "@/components/shell/org-context";
@@ -126,7 +125,6 @@ function HowToConnect() {
 }
 
 function OrgConnectionCard({ org }: { org: Organization }) {
-  const router = useRouter();
   const [pending, start] = useTransition();
   const [showPaste, setShowPaste] = useState(false);
   const [pageId, setPageId] = useState("");
@@ -137,12 +135,10 @@ function OrgConnectionCard({ org }: { org: Organization }) {
     setResult(null);
     start(async () => {
       const r = await connectPageWithToken(org.id, pageId, token);
-      router.refresh();
       if (r.ok) {
-        setResult({ ok: `Connected to ${r.pageName}` });
-        setShowPaste(false);
-        setPageId("");
-        setToken("");
+        // Full reload so the top status + every screen reflect the new state
+        // (router.refresh alone leaves the client cache stale on Vercel).
+        window.location.reload();
       } else {
         setResult({ error: r.error ?? "Couldn't connect." });
       }
@@ -153,7 +149,7 @@ function OrgConnectionCard({ org }: { org: Organization }) {
     setResult(null);
     start(async () => {
       await disconnectFacebook(org.id);
-      router.refresh();
+      window.location.reload();
     });
   }
 
