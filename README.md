@@ -2,7 +2,6 @@
 
 AI-assisted Facebook posting for non-profits. Reads an organization's websites, drafts posts with a store call-to-action, waits for approval, then publishes to Facebook automatically — one dashboard, multiple organizations.
 
-## Status — Week 1 (UI foundation)
 
 Built on typed mock data so the client can see and click the real experience. Week 2 wires the database, website scraper, AI generation, and Meta Graph API behind the same types.
 
