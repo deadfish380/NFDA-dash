@@ -220,7 +220,12 @@ export async function createOrganization(name: string, firstSiteUrl: string) {
 export async function disconnectFacebook(orgId: string) {
   await db
     .update(schema.organizations)
-    .set({ facebookConnected: false, facebookPageId: null, facebookPageToken: null })
+    .set({
+      facebookConnected: false,
+      facebookPageId: null,
+      facebookPageToken: null,
+      facebookPage: null, // clear the name too, so nothing looks "connected" after
+    })
     .where(eq(schema.organizations.id, orgId));
   refresh();
 }

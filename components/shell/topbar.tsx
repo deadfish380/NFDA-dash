@@ -39,7 +39,7 @@ export function Topbar({ title, dryRun, authEnabled }: { title: string; dryRun: 
           )}
         >
           <Facebook className={cn("size-3.5", activeOrg.facebookConnected ? "text-primary" : "text-muted-foreground")} />
-          {activeOrg.facebookConnected ? "Facebook connected" : "Not connected"}
+          {activeOrg.shortName} · {activeOrg.facebookConnected ? "Connected" : "Not connected"}
         </span>
         <ThemeToggle />
         {authEnabled ? (

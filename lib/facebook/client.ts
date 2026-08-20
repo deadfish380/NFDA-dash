@@ -1,4 +1,13 @@
 import "server-only";
+import { setDefaultResultOrder } from "node:dns";
+
+// undici "fetch failed" reaching graph.facebook.com is often an IPv6 dead-path;
+// prefer IPv4 to avoid it. Best-effort — ignore if the runtime doesn't allow it.
+try {
+  setDefaultResultOrder("ipv4first");
+} catch {
+  // not supported here — no-op
+}
 
 const GRAPH = "https://graph.facebook.com/v21.0";
 const APP_ID = process.env.META_APP_ID ?? "";
@@ -123,18 +132,31 @@ export async function postToPage(opts: {
 const GRAPH_TIMEOUT_MS = 10_000;
 
 async function graphFetch(url: string, init?: RequestInit): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), GRAPH_TIMEOUT_MS);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } catch (err) {
-    if (err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError")) {
-      throw new Error(`Facebook request timed out after ${GRAPH_TIMEOUT_MS}ms`);
+  // Retry network blips ("fetch failed") on GETs, which are idempotent. POSTs
+  // (actually publishing) run once so a lost response can't cause a double-post.
+  const isGet = !init?.method || init.method.toUpperCase() === "GET";
+  const maxAttempts = isGet ? 3 : 1;
+  let lastErr: unknown;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), GRAPH_TIMEOUT_MS);
+    try {
+      return await fetch(url, { ...init, signal: controller.signal });
+    } catch (err) {
+      lastErr = err;
+    } finally {
+      clearTimeout(timer);
     }
-    throw err;
-  } finally {
-    clearTimeout(timer);
+    if (attempt < maxAttempts - 1) {
+      await new Promise((r) => setTimeout(r, 400 * (attempt + 1))); // small backoff
+    }
   }
+
+  if (lastErr instanceof Error && (lastErr.name === "AbortError" || lastErr.name === "TimeoutError")) {
+    throw new Error(`Facebook request timed out after ${GRAPH_TIMEOUT_MS}ms`);
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("Facebook request failed");
 }
 
 async function graphGet(path: string, params: Record<string, string>) {

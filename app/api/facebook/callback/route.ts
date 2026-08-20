@@ -24,7 +24,14 @@ export async function GET(req: NextRequest) {
       path: "/",
     });
     return res;
-  } catch {
-    return NextResponse.redirect(new URL("/organizations?fb=error", req.url));
+  } catch (err) {
+    // Surface the real reason (redirect_uri mismatch, used code, etc.) so we can
+    // see it in the dev terminal and the URL instead of a blank "error".
+    const message = (err as Error).message ?? "unknown";
+    console.error("[facebook/callback] token exchange failed:", message);
+    console.error("[facebook/callback] origin used:", req.nextUrl.origin);
+    return NextResponse.redirect(
+      new URL(`/organizations?fb=error&msg=${encodeURIComponent(message.slice(0, 300))}`, req.url),
+    );
   }
 }
