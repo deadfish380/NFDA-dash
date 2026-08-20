@@ -5,7 +5,8 @@ import { cronAuthorized } from "@/lib/cron-auth";
 // The posting job — publishes approved posts whose scheduled time has arrived.
 // Run this frequently (e.g. hourly) so posts go out close to their posting time.
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+// Hobby caps functions at 60s. Raise this once on Vercel Pro.
+export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
   if (!cronAuthorized(req)) {
