@@ -1,9 +1,8 @@
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Facebook } from "lucide-react";
-import { connectSelectedPage } from "@/app/actions";
 import { getUserPages } from "@/lib/facebook/client";
+import { PagePicker } from "@/components/connect/page-picker";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -57,30 +56,7 @@ export default async function ConnectPage({
                 No pages found on this account.
               </p>
             ) : (
-              pages.map((page) => (
-                <form
-                  key={page.id}
-                  action={async () => {
-                    "use server";
-                    await connectSelectedPage(orgId, page.id);
-                    redirect("/organizations");
-                  }}
-                >
-                  <button
-                    type="submit"
-                    className="flex w-full items-center gap-3 rounded-md border border-border p-3 text-left transition-colors hover:bg-muted"
-                  >
-                    <span className="flex size-9 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                      <Facebook className="size-4" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">{page.name}</span>
-                      <span className="block truncate text-[11px] text-muted-foreground">Page ID {page.id}</span>
-                    </span>
-                    <span className="shrink-0 text-sm font-medium text-primary">Connect</span>
-                  </button>
-                </form>
-              ))
+              <PagePicker orgId={orgId} pages={pages.map((p) => ({ id: p.id, name: p.name }))} />
             )}
           </CardContent>
         </Card>
