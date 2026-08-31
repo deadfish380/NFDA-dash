@@ -18,12 +18,33 @@ export default function SettingsPage() {
   return <SettingsForm key={activeOrg.id} org={activeOrg} />;
 }
 
+// Sensible default times to seed new slots when "posts per day" goes up.
+const DEFAULT_TIMES = ["09:00", "15:00", "12:00", "18:00", "10:30", "14:00"];
+
+/** Keep exactly one posting-time slot per post: pad up, trim down. */
+function fitTimes(times: string[], count: number): string[] {
+  const next = times.slice(0, count);
+  while (next.length < count) next.push(DEFAULT_TIMES[next.length] ?? "12:00");
+  return next;
+}
+
 function SettingsForm({ org }: { org: Organization }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
   const [postsPerDay, setPostsPerDay] = useState(org.postsPerDay);
-  const [times, setTimes] = useState(org.postingTimes.length ? org.postingTimes : ["09:00", "15:00"]);
+  const [times, setTimes] = useState(() =>
+    fitTimes(org.postingTimes?.length ? org.postingTimes : ["09:00", "15:00"], org.postsPerDay),
+  );
+
+  // Changing the post count adds/removes time slots so there's always one per post.
+  function changeCount(delta: number) {
+    setPostsPerDay((n) => {
+      const next = Math.max(1, Math.min(6, n + delta));
+      setTimes((prev) => fitTimes(prev, next));
+      return next;
+    });
+  }
   const [autoApprove, setAutoApprove] = useState(org.autoApprove);
   const [voice, setVoice] = useState(org.brandVoice ?? "");
 
@@ -56,11 +77,11 @@ function SettingsForm({ org }: { org: Organization }) {
                   <div className="text-xs text-muted-foreground">How many the system drafts each day</div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button size="sm" variant="outline" aria-label="Fewer posts" onClick={() => setPostsPerDay((n) => Math.max(1, n - 1))}>
+                  <Button size="sm" variant="outline" aria-label="Fewer posts" onClick={() => changeCount(-1)}>
                     <Minus className="size-4" />
                   </Button>
                   <span className="w-8 text-center text-lg font-semibold tabular-nums">{postsPerDay}</span>
-                  <Button size="sm" variant="outline" aria-label="More posts" onClick={() => setPostsPerDay((n) => Math.min(6, n + 1))}>
+                  <Button size="sm" variant="outline" aria-label="More posts" onClick={() => changeCount(1)}>
                     <Plus className="size-4" />
                   </Button>
                 </div>
@@ -69,13 +90,18 @@ function SettingsForm({ org }: { org: Organization }) {
               <div className="space-y-2">
                 <Label>Posting times</Label>
                 {times.map((t, i) => (
-                  <Input
-                    key={i}
-                    type="time"
-                    value={t}
-                    onChange={(e) => setTimes((prev) => prev.map((x, j) => (j === i ? e.target.value : x)))}
-                  />
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="w-5 text-center text-xs text-muted-foreground tabular-nums">{i + 1}</span>
+                    <Input
+                      type="time"
+                      value={t}
+                      onChange={(e) => setTimes((prev) => prev.map((x, j) => (j === i ? e.target.value : x)))}
+                    />
+                  </div>
                 ))}
+                <p className="text-xs text-muted-foreground">
+                  One time per post. Change &ldquo;Posts per day&rdquo; to add or remove slots.
+                </p>
               </div>
             </CardContent>
           </Card>
