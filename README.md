@@ -1,5 +1,5 @@
 # NFDA Social Dashboard
-
+ 
 AI-assisted Facebook posting for non-profits. Reads an organization's websites, drafts posts with a store call-to-action, waits for approval, then publishes to Facebook automatically — one dashboard, multiple organizations.
 
 
